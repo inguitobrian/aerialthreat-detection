@@ -20,7 +20,7 @@
           <h2>Upload Image or Video</h2>
           <p>Drag and drop or click to select</p>
           <button @click="$refs.fileInput.click()" class="btn-primary">Select File</button>
-          <p class="file-info">Supported: JPG, PNG, MP4, AVI, MOV</p>
+          <p class="file-info">Supported: JPG, PNG, MP4</p>
 
           <!-- Speed Mode Selector for Videos -->
           <div class="speed-mode-selector">
