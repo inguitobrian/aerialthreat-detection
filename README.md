@@ -86,18 +86,31 @@ npm run electron-build
 
 ```
 ├── src/                    # Vue.js frontend source
+│   ├── App.vue            # Main Vue application component
+│   ├── main.js            # Vue application entry point
 │   ├── components/         # Vue components
+│   │   └── DetectionView.vue # Main detection interface component
 │   ├── router/            # Vue router configuration
+│   │   └── index.js       # Router setup
 │   ├── services/          # API services
 │   └── stores/            # Pinia stores
+│       └── counter.js     # Application state management
 ├── electron/              # Electron main process
 │   └── main.js           # Electron entry point
 ├── backend/               # Python backend
 │   ├── server.py         # FastAPI server
 │   ├── detect.py         # YOLO detection logic
-│   └── requirements.txt  # Python dependencies
+│   ├── requirements.txt  # Python dependencies
+│   ├── uploads/          # Uploaded files directory
+│   └── outputs/          # Detection results directory
 ├── public/                # Static assets
-└── yolo11s.pt            # YOLO model file
+├── index.html            # Main HTML template
+├── package.json          # Node.js dependencies and scripts
+├── vite.config.js        # Vite build configuration
+├── vitest.config.js      # Vitest testing configuration
+├── eslint.config.js      # ESLint configuration
+├── jsconfig.json         # JavaScript/TypeScript configuration
+└── yolo11s.pt            # YOLOv11 model file
 ```
 
 ## Usage
