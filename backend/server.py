@@ -3,6 +3,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import re
+import time
 import mimetypes
 from pathlib import Path
 from detect import ThreatDetector
@@ -158,6 +159,46 @@ def model_info():
         'classes': class_names,
         'status': 'loaded'
     }), 200
+
+@app.route('/api/download/image', methods=['POST'])
+def download_image():
+    """
+    Save and serve detection result image
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'image_data' not in data:
+            return jsonify({'error': 'No image data provided'}), 400
+        
+        import base64
+        import tempfile
+        
+        # Decode base64 image
+        image_data = data['image_data']
+        filename = data.get('filename', f"detection_result_{int(time.time())}.jpg")
+        
+        # Ensure filename has proper extension
+        if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            filename = f"{filename}.jpg"
+        
+        # Create output path
+        output_path = os.path.join(app.config['UPLOAD_FOLDER'], f"saved_{filename}")
+        
+        # Decode and save image
+        image_bytes = base64.b64decode(image_data)
+        with open(output_path, 'wb') as f:
+            f.write(image_bytes)
+        
+        return send_file(
+            output_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='image/jpeg'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/video/<filename>')
 def serve_video(filename):

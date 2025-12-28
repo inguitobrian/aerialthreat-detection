@@ -79,6 +79,31 @@
         <div v-if="result.type === 'image'" class="image-result">
           <div class="result-image">
             <img :src="'data:image/jpeg;base64,' + result.annotated_image" alt="Detected" />
+            <div class="image-actions">
+              <button
+                @click="downloadImage"
+                class="btn-download"
+                title="Save the image with detection boxes and labels"
+              >
+                💾 Save Detected Image
+              </button>
+              <button
+                @click="downloadOriginalImage"
+                class="btn-download"
+                v-if="result.original_image"
+                title="Save the original image without annotations"
+              >
+                📷 Save Original Image
+              </button>
+              <button
+                @click="downloadBothImages"
+                class="btn-download"
+                v-if="result.original_image"
+                title="Download both original and detected images"
+              >
+                📦 Save Both Images
+              </button>
+            </div>
           </div>
           <div class="detections-summary">
             <h3>📋 Summary</h3>
@@ -133,6 +158,15 @@
             >
               Your browser does not support the video tag.
             </video>
+            <div class="video-actions">
+              <button
+                @click="downloadVideo"
+                class="btn-download"
+                title="Download the processed video with detections"
+              >
+                💾 Download Video
+              </button>
+            </div>
           </div>
 
           <div class="video-info">
@@ -158,6 +192,12 @@
           <button @click="reset" class="btn-primary">Try Again</button>
         </div>
       </div>
+
+      <!-- Notification -->
+      <div class="notification" v-if="notification" :class="notification.type">
+        <span>{{ notification.message }}</span>
+        <button @click="notification = null" class="notification-close">×</button>
+      </div>
     </div>
   </div>
 </template>
@@ -179,6 +219,7 @@ export default {
       fileType: '',
       videoUrl: null,
       speedMode: 'fast', // Default to fast processing
+      notification: null, // For showing save notifications
     }
   },
   computed: {
@@ -193,6 +234,11 @@ export default {
   },
   mounted() {
     this.loadModelInfo()
+    // Add keyboard shortcut for saving
+    document.addEventListener('keydown', this.handleKeydown)
+  },
+  beforeUnmount() {
+    document.removeEventListener('keydown', this.handleKeydown)
   },
   methods: {
     getClassNames(classes) {
@@ -292,6 +338,161 @@ export default {
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
+        this.showNotification('✅ Video downloaded successfully!')
+      }
+    },
+    showNotification(message, type = 'success') {
+      this.notification = { message, type }
+      setTimeout(() => {
+        this.notification = null
+      }, 3000)
+    },
+    downloadImage() {
+      if (this.result && this.result.annotated_image) {
+        this.downloadBase64Image(this.result.annotated_image, 'detected_')
+        this.showNotification('✅ Detected image saved successfully!')
+      }
+    },
+    downloadOriginalImage() {
+      if (this.result && this.result.original_image) {
+        this.downloadBase64Image(this.result.original_image, 'original_')
+        this.showNotification('✅ Original image saved successfully!')
+      }
+    },
+    async downloadBothImages() {
+      if (this.result && this.result.annotated_image && this.result.original_image) {
+        // Download detected image
+        this.downloadBase64Image(this.result.annotated_image, 'detected_')
+
+        // Wait a bit to avoid browser blocking multiple downloads
+        setTimeout(() => {
+          this.downloadBase64Image(this.result.original_image, 'original_')
+          this.showNotification('✅ Both images saved successfully!')
+        }, 500)
+      }
+    },
+    downloadBase64Image(base64Data, prefix = '') {
+      if (base64Data) {
+        const fileName = this.result.filename
+          ? `${prefix}${this.result.filename}`
+          : `${prefix}detection_result_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.jpg`
+
+        // Convert base64 to blob
+        const byteCharacters = atob(base64Data)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: 'image/jpeg' })
+
+        // Create download link
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        // Clean up
+        URL.revokeObjectURL(url)
+      }
+    },
+    async saveImageToServer() {
+      // Alternative method to save image via backend endpoint
+      if (this.result && this.result.annotated_image) {
+        try {
+          const response = await axios.post(
+            'http://127.0.0.1:5000/api/download/image',
+            {
+              image_data: this.result.annotated_image,
+              filename: this.result.filename,
+            },
+            {
+              responseType: 'blob',
+            },
+          )
+
+          // Create download link from response
+          const url = window.URL.createObjectURL(new Blob([response.data]))
+          const link = document.createElement('a')
+          link.href = url
+          link.download = this.result.filename
+            ? `detected_${this.result.filename}`
+            : 'detection_result.jpg'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(url)
+        } catch (error) {
+          console.error('Error saving image:', error)
+          this.error = 'Failed to save image'
+        }
+      }
+    },
+    downloadDetectionReport() {
+      if (this.result) {
+        // Create detection report data
+        const reportData = {
+          metadata: {
+            filename: this.result.filename,
+            type: this.result.type,
+            timestamp: new Date().toISOString(),
+            total_detections: this.result.total_detections,
+          },
+          detections: this.result.detections,
+          summary: {
+            soldiers: this.soldierCount,
+            civilians: this.civilianCount,
+          },
+        }
+
+        // Add additional metadata for images
+        if (this.result.type === 'image' && this.result.image_dimensions) {
+          reportData.metadata.image_dimensions = this.result.image_dimensions
+        }
+
+        // Add processing info for videos
+        if (this.result.type === 'video' && this.result.processing_info) {
+          reportData.metadata.processing_info = this.result.processing_info
+          reportData.metadata.speed_mode = this.result.speed_mode
+        }
+
+        // Convert to JSON
+        const jsonData = JSON.stringify(reportData, null, 2)
+        const blob = new Blob([jsonData], { type: 'application/json' })
+
+        // Create download link
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = this.result.filename
+          ? `detection_report_${this.result.filename.split('.')[0]}.json`
+          : `detection_report_${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        // Clean up
+        URL.revokeObjectURL(url)
+        this.showNotification('✅ Detection report saved successfully!')
+      }
+    },
+    handleKeydown(event) {
+      // Ctrl+S or Cmd+S to save main result
+      if ((event.ctrlKey || event.metaKey) && event.key === 's' && this.result) {
+        event.preventDefault()
+        if (this.result.type === 'image') {
+          this.downloadImage()
+        } else if (this.result.type === 'video') {
+          this.downloadVideo()
+        }
+      }
+      // Ctrl+Shift+S or Cmd+Shift+S to save report
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'S' && this.result) {
+        event.preventDefault()
+        this.downloadDetectionReport()
       }
     },
     reset() {
@@ -302,6 +503,7 @@ export default {
       this.progress = 0
       this.statusMessage = ''
       this.videoUrl = null
+      this.notification = null
       if (this.$refs.fileInput) {
         this.$refs.fileInput.value = ''
       }
@@ -1055,11 +1257,30 @@ export default {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
 }
 
 .btn-download:hover {
   transform: scale(1.05);
-  box-shadow: 0 5px 15px rgba(34, 197, 94, 0.4);
+  box-shadow:
+    0 5px 15px rgba(34, 197, 94, 0.4),
+    0 0 30px rgba(0, 255, 65, 0.5);
+}
+
+.image-actions,
+.video-actions {
+  margin-top: 20px;
+  text-align: center;
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.image-actions .btn-download,
+.video-actions .btn-download {
+  flex: 0 1 auto;
+  min-width: 160px;
 }
 
 .video-result {
@@ -1336,5 +1557,59 @@ button:focus,
 input:focus {
   outline: 2px solid #00ff41;
   outline-offset: 2px;
+}
+
+/* Notification Styles */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 300px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+}
+
+.notification.success {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: 1px solid #00ff41;
+}
+
+.notification.error {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: 1px solid #ff4444;
+}
+
+.notification-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  margin-left: 15px;
+  padding: 0;
+  line-height: 1;
+}
+
+.notification-close:hover {
+  opacity: 0.7;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 </style>

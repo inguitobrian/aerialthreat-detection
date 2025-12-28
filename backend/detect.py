@@ -80,10 +80,19 @@ class ThreatDetector:
         _, buffer = cv2.imencode('.jpg', annotated_img)
         img_base64 = base64.b64encode(buffer).decode('utf-8')
         
+        # Also convert original image to base64 for comparison
+        _, orig_buffer = cv2.imencode('.jpg', img)
+        orig_img_base64 = base64.b64encode(orig_buffer).decode('utf-8')
+        
         return {
             'detections': detections,
             'annotated_image': img_base64,
-            'total_detections': len(detections)
+            'original_image': orig_img_base64,
+            'total_detections': len(detections),
+            'image_dimensions': {
+                'width': img.shape[1],
+                'height': img.shape[0]
+            }
         }
     
     def detect_video(self, video_path, output_path=None):
